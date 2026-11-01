@@ -80,6 +80,13 @@ def find_shadow_admins(user_permissions, effective_admin_permissions):
             logging.warning(f"User {user} has invalid permissions format. Skipping.")
             continue
 
+        # The test is exact string membership. I do no path tidying, so
+        # the same file written with a trailing slash, a relative form,
+        # or different case in the two input files does not match and
+        # the user is missed.
+        # all() on an empty profile would name every user, which is why
+        # main refuses an empty profile before this function ever runs.
+        # That guard is load bearing, not decoration.
         if all(perm in permissions for perm in effective_admin_permissions):
             shadow_admins.append(user)
             logging.info(f"User {user} identified as a shadow admin.")
@@ -166,6 +173,11 @@ def main():
         print("Error: User permissions data must be a non-empty object. Nothing was checked.")
         sys.exit(1)
 
+    # The overwrite check runs before any result exists and compares
+    # resolved paths, so a symlink or a relative spelling of an input
+    # file is still caught. Saving happens before the table prints, and
+    # a save failure exits without ever showing the found names on
+    # screen.
     if args.output_file:
         output_resolved = os.path.realpath(args.output_file)
         if output_resolved in (os.path.realpath(args.user_permissions_file), os.path.realpath(args.effective_admin_permissions_file)):
