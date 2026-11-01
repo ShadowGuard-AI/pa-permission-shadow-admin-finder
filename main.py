@@ -6,7 +6,6 @@ import json
 
 # Attempt to import dependencies, exit if not found (as per requirements)
 try:
-    import pathspec
     from rich.console import Console
     from rich.table import Column, Table
 except ImportError as e:
@@ -95,14 +94,19 @@ def save_results(results, output_file):
     Args:
         results (list): A list of shadow admin usernames.
         output_file (str): The path to the output file.
+
+    Returns:
+        True when the file was written, False on failure.
     """
     try:
         with open(output_file, "w") as f:
             for user in results:
                 f.write(f"{user}\n")
         logging.info(f"Results saved to: {output_file}")
+        return True
     except Exception as e:
         logging.error(f"Error saving results to {output_file}: {e}")
+        return False
 
 
 def display_results(results):
@@ -143,15 +147,38 @@ def main():
         sys.exit(1)
 
     # Validate structure of permissions data
+    if not isinstance(effective_admin_permissions_data, dict):
+        logging.error("Invalid format for effective admin permissions. Expected an object with a 'permissions' key. Exiting.")
+        print("Error: Effective admin permissions data must be an object with a 'permissions' key. Nothing was checked.")
+        sys.exit(1)
     effective_admin_permissions = effective_admin_permissions_data.get("permissions") #Example Format {"permissions":["/path/to/file1", "/path/to/file2"]}
     if not isinstance(effective_admin_permissions, list):
         logging.error("Invalid format for effective admin permissions. Expected list of permissions in a 'permissions' key.  Exiting.")
         sys.exit(1)
 
+    if len(effective_admin_permissions) == 0:
+        logging.error("Effective admin profile is empty. Nothing was checked.")
+        print("Error: Effective admin profile is empty. Nothing was checked.")
+        sys.exit(1)
+
+    if not isinstance(user_permissions_data, dict) or len(user_permissions_data) == 0:
+        logging.error("User permissions data must be a non-empty object. Nothing was checked.")
+        print("Error: User permissions data must be a non-empty object. Nothing was checked.")
+        sys.exit(1)
+
+    if args.output_file:
+        output_resolved = os.path.realpath(args.output_file)
+        if output_resolved in (os.path.realpath(args.user_permissions_file), os.path.realpath(args.effective_admin_permissions_file)):
+            logging.error("Output file must not overwrite an input file.")
+            print("Error: Output file must not overwrite an input file.")
+            sys.exit(1)
+
     shadow_admins = find_shadow_admins(user_permissions_data, effective_admin_permissions)
 
     if args.output_file:
-        save_results(shadow_admins, args.output_file)
+        if not save_results(shadow_admins, args.output_file):
+            print("Error: Results not saved: writing the output file failed.")
+            sys.exit(1)
 
     display_results(shadow_admins)
 
